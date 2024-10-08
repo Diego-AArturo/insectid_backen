@@ -3,10 +3,78 @@ import json
 import re
 from dotenv import load_dotenv
 import os
+import firebase_admin
+from firebase_admin import credentials, firestore
 
 load_dotenv()
 api = os.getenv('API_GEMINI')
 genai.configure(api_key=api)
+
+# Conexión DB con python (adjuntar key de sesion)
+firebase_config = {
+    "type": os.getenv('FIREBASE_TYPE'),
+    "project_id": os.getenv('FIREBASE_PROJECT_ID'),
+    "private_key_id": os.getenv('FIREBASE_PRIVATE_KEY_ID'),
+    "private_key": os.getenv('FIREBASE_PRIVATE_KEY'),  # Importante: reemplazar los saltos de línea
+    "client_email": os.getenv('FIREBASE_CLIENT_EMAIL'),
+    "client_id": os.getenv('FIREBASE_CLIENT_ID'),
+    "auth_uri": os.getenv('FIREBASE_AUTH_URI'),
+    "token_uri": os.getenv('FIREBASE_TOKEN_URI'),
+    "auth_provider_x509_cert_url": os.getenv('FIREBASE_AUTH_PROVIDER_CERT_URL'),
+    "client_x509_cert_url": os.getenv('FIREBASE_CLIENT_CERT_URL'),
+    "universe_domain": os.getenv('FIREBASE_UNIVERSE_DOMAIN')
+}
+
+# Inicializar Firebase con las credenciales cargadas
+cred = credentials.Certificate(firebase_config)
+firebase_admin.initialize_app(cred)
+
+# Inicializar Firestore
+db = firestore.client()
+
+# Inicio de sesion
+def validar_inicio_sesion(nombre, password):
+    try:
+        # Busca en la colección 'usuarios' el documento que coincida con el email
+        usuarios_ref = db.collection('usuarios').where('nombre', '==', nombre).stream()
+
+        # Iterar sobre los documentos devueltos (aunque debería ser uno solo si el email es único)
+        for usuario in usuarios_ref:
+            usuario_data = usuario.to_dict()    
+            if usuario_data['contraseña'] == password:
+                return True, "Inicio de sesión exitoso"
+            else:
+                return False, "Contraseña incorrecta"
+        
+        # Si no se encuentra el email
+        return False, "Usuario no encontrado"
+    
+    except Exception as e:
+        return False, f"Error al validar: {str(e)}"
+    
+# Creación de usuario
+def crear_usuario(nombre, password):
+    try:
+        # Verificar si ya existe un usuario con el mismo nombre
+        usuarios_ref = db.collection('usuarios').where('nombre', '==', nombre).stream()
+
+        # Iterar sobre los documentos devueltos para ver si ya existe un usuario con ese nombre
+        for usuario in usuarios_ref:
+            return {"status": "fail", "mensaje": f"El usuario {nombre} ya existe"}
+
+        # Si no existe, proceder a crear un nuevo usuario
+        doc_ref = db.collection('usuarios').document()
+        
+        # Establecer los datos del usuario en Firestore
+        doc_ref.set({
+            'nombre': nombre,
+            'contraseña': password
+        })
+
+        return {"status": "success", "mensaje": f"Usuario {nombre} creado exitosamente"}
+    
+    except Exception as e:
+        return {"status": "fail", "mensaje": f"Error al crear usuario: {str(e)}"}
 
 # Función para subir la imagen
 def image(path: str):
@@ -65,6 +133,24 @@ def classify_insect(sample_file):
     except Exception as e:
         print("Error in model generation:", e)
         return {"error": "Error generating response from model"}
+    
+# Almacenar datos generados
+def procesar_informacion_insecto(insect_data: dict) -> dict:
+    try:
+        # Referencia a la colección "insects" en Firestore
+        insects_ref = db.collection('insectos')
+
+        # Añadir los datos a Firestore
+        doc_ref = insects_ref.add(insect_data)
+
+        # Devolver una respuesta de éxito con el ID del documento
+        return {"success": True, "doc_id": doc_ref[1].id}
+    
+    except Exception as e:
+        print(f"Error storing insect data: {e}")
+        return {"success": False, "error": str(e)}
+
+
 
 # Función principal que llama a la subida y clasificación de la imagen
 def id_insect(path: str) -> dict:
@@ -74,4 +160,5 @@ def id_insect(path: str) -> dict:
 
     Insect_classification = classify_insect(sample_file)
     return Insect_classification
+
 
