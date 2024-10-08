@@ -15,7 +15,7 @@ firebase_config = {
     "type": os.getenv('FIREBASE_TYPE'),
     "project_id": os.getenv('FIREBASE_PROJECT_ID'),
     "private_key_id": os.getenv('FIREBASE_PRIVATE_KEY_ID'),
-    "private_key": os.getenv('FIREBASE_PRIVATE_KEY'),  # Importante: reemplazar los saltos de línea
+    "private_key": os.getenv('FIREBASE_PRIVATE_KEY').replace('\\n', '\n'),  # Importante: reemplazar los saltos de línea
     "client_email": os.getenv('FIREBASE_CLIENT_EMAIL'),
     "client_id": os.getenv('FIREBASE_CLIENT_ID'),
     "auth_uri": os.getenv('FIREBASE_AUTH_URI'),
